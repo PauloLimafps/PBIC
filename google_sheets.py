@@ -14,40 +14,36 @@ from datetime import datetime
 def get_sheet():
     """Connects to Google Sheets and returns the worksheet."""
     try:
-        # Check if we are in Streamlit Cloud (searching for secrets)
-        has_secrets = False
         creds_info = None
         spreadsheet_id = None
 
+        # 1. Try to get from st.secrets (Streamlit Cloud preferred)
         if "google_sheets" in st.secrets:
-            has_secrets = True
             creds_info = st.secrets["google_sheets"]["credentials"]
             spreadsheet_id = st.secrets["google_sheets"].get("spreadsheet_id")
         elif "credentials" in st.secrets:
-            # Fallback for alternative secrets structure
-            has_secrets = True
             creds_info = st.secrets["credentials"]
             spreadsheet_id = st.secrets.get("spreadsheet_id")
 
-        if has_secrets:
+        if creds_info and spreadsheet_id:
             creds = Credentials.from_service_account_info(
                 dict(creds_info), 
                 scopes=["https://www.googleapis.com/auth/spreadsheets"]
             )
+        # 2. Try Local Fallback (credentials.json)
+        elif os.path.exists("credentials.json"):
+            # Use the ID provided by the user as fallback or look in st.session_state
+            spreadsheet_id = "1TqWL2Q03uDAtJKkKvA8Hb2fHXwp2GrCpJXk-k1ntgMg"
+            creds = Credentials.from_service_account_file(
+                "credentials.json",
+                scopes=["https://www.googleapis.com/auth/spreadsheets"]
+            )
         else:
-            # Local fallback
-            spreadsheet_id = st.sidebar.text_input("ID da Planilha", value="1TqWL2Q03uDAtJKkKvA8Hb2fHXwp2GrCpJXk-k1ntgMg", type="password", key="gs_id")
-            if os.path.exists("credentials.json"):
-                creds = Credentials.from_service_account_file(
-                    "credentials.json",
-                    scopes=["https://www.googleapis.com/auth/spreadsheets"]
-                )
-            else:
-                st.warning("Configuração de segredos (secrets) não detectada no Dashboard do Streamlit.")
-                return None
+            st.error("Configuração de Google Sheets ausente. Por favor, configure os 'Secrets' no dashboard do Streamlit.")
+            return None
             
         if not spreadsheet_id:
-            st.error("ID da Planilha não configurado.")
+            st.error("ID da Planilha não encontrado nos segredos.")
             return None
 
         client = gspread.authorize(creds)
