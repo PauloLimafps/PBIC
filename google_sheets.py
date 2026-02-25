@@ -26,8 +26,13 @@ def get_sheet():
             spreadsheet_id = st.secrets.get("spreadsheet_id")
 
         if creds_info and spreadsheet_id:
+            # Fix common formatting issues with private_key from secrets
+            info = dict(creds_info)
+            if "private_key" in info:
+                info["private_key"] = info["private_key"].replace("\\n", "\n")
+                
             creds = Credentials.from_service_account_info(
-                dict(creds_info), 
+                info, 
                 scopes=["https://www.googleapis.com/auth/spreadsheets"]
             )
         # 2. Try Local Fallback (credentials.json)
