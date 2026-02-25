@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.streamlit/
+conversations.json
+credentials.json
+database.py
+evaluations.db
+
