@@ -166,22 +166,36 @@ def check_password():
     if st.session_state.get("password_correct", False):
         return True
 
+    def password_entered():
+        user = st.session_state.get("username_input", "").strip()
+        pwd = st.session_state.get("password_input", "").strip()
+        
+        # Prevent premature errors if the button is clicked with empty fields
+        if not user or not pwd:
+            return
+            
+        if user in available_passwords and pwd == available_passwords[user]:
+            st.session_state["password_correct"] = True
+            st.session_state["logged_user"] = user
+            if "login_error" in st.session_state:
+                del st.session_state["login_error"]
+            # Clear passwords from state securely
+            if "password_input" in st.session_state:
+                del st.session_state["password_input"]
+        else:
+            st.session_state["password_correct"] = False
+            st.session_state["login_error"] = True
+
     st.markdown('<div class="login-header"><h1>Sistema de Avaliação de Prompts</h1><p>Acesse com suas credenciais para continuar</p></div>', unsafe_allow_html=True)
     col_l, col_m, col_r = st.columns([1, 2, 1])
     with col_m:
         with st.container(border=True):
-            with st.form("login_form"):
-                username = st.text_input("Usuário")
-                password = st.text_input("Senha", type="password")
-                submit = st.form_submit_button("Entrar", use_container_width=True)
-                
-                if submit:
-                    if username in available_passwords and password == available_passwords[username]:
-                        st.session_state["password_correct"] = True
-                        st.session_state["logged_user"] = username
-                        st.rerun()
-                    else:
-                        st.error("😕 Usuário ou senha incorretos")
+            st.text_input("Usuário", key="username_input")
+            st.text_input("Senha", type="password", key="password_input", on_change=password_entered)
+            st.button("Entrar", on_click=password_entered, use_container_width=True)
+            
+            if st.session_state.get("login_error", False):
+                st.error("😕 Usuário ou senha incorretos")
     return False
 
 if not check_password():
