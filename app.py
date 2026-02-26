@@ -159,41 +159,48 @@ div[role="radiogroup"] label[data-baseweb="radio"] {
 def check_password():
     """Returns `True` if the user had the correct password."""
     
-    # Fallback credentials if secrets are missing
     DEFAULT_PASSWORDS = {"admin": "admin", "avaliador1": "1234", "avaliador2": "5678"}
     available_passwords = st.secrets.get("passwords", DEFAULT_PASSWORDS)
 
+    # Already authenticated — let the app proceed
     if st.session_state.get("password_correct", False):
         return True
 
-    def password_entered():
+    def _try_login():
+        """Callback: only sets state. Never calls st.rerun()."""
         user = st.session_state.get("username_input", "").strip()
-        pwd = st.session_state.get("password_input", "").strip()
-        
-        # Prevent premature errors if the button is clicked with empty fields
+        pwd  = st.session_state.get("password_input", "").strip()
         if not user or not pwd:
             return
-            
         if user in available_passwords and pwd == available_passwords[user]:
             st.session_state["password_correct"] = True
-            st.session_state["logged_user"] = user
-            if "login_error" in st.session_state:
-                del st.session_state["login_error"]
-            st.rerun()
+            st.session_state["logged_user"]      = user
+            st.session_state.pop("login_error", None)
         else:
             st.session_state["password_correct"] = False
-            st.session_state["login_error"] = True
+            st.session_state["login_error"]      = True
 
-    st.markdown('<div class="login-header"><h1>Sistema de Avaliação de Prompts</h1><p>Acesse com suas credenciais para continuar</p></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="login-header">'
+        '<h1>Sistema de Avaliação de Prompts</h1>'
+        '<p>Acesse com suas credenciais para continuar</p>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     col_l, col_m, col_r = st.columns([1, 2, 1])
     with col_m:
         with st.container(border=True):
             st.text_input("Usuário", key="username_input")
-            st.text_input("Senha", type="password", key="password_input", on_change=password_entered)
-            st.button("Entrar", on_click=password_entered, use_container_width=True)
-            
+            st.text_input("Senha",   type="password", key="password_input", on_change=_try_login)
+            st.button("Entrar", on_click=_try_login, use_container_width=True)
+
             if st.session_state.get("login_error", False):
                 st.error("😕 Usuário ou senha incorretos")
+
+    # Detecta sucesso após o callback ter rodado e redireciona
+    if st.session_state.get("password_correct", False):
+        st.rerun()
+
     return False
 
 if not check_password():
@@ -284,7 +291,7 @@ def parse_messages(mapping):
         if msg_obj and msg_obj.get('author') and msg_obj.get('content'):
             role = msg_obj['author']['role']
             content = msg_obj['content'].get('parts', [])
-            create_time = msg_obj.get('create_time', 0)
+            create_time = msg_obj.get('create_time') or 0   # guard against None
             
             text = " ".join([str(p) for p in content if p and str(p).strip()])
             
@@ -295,7 +302,7 @@ def parse_messages(mapping):
                     'time': create_time
                 })
     
-    messages.sort(key=lambda x: x['time'])
+    messages.sort(key=lambda x: (x['time'] or 0))  # guard against None in sort
     return messages
 
 # UI Layout
