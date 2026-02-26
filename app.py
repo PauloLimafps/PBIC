@@ -163,44 +163,94 @@ def check_password():
     DEFAULT_PASSWORDS = {"admin": "admin", "avaliador1": "1234", "avaliador2": "5678"}
     available_passwords = st.secrets.get("passwords", DEFAULT_PASSWORDS)
 
-    def password_entered():
-        """Checks whether a password entered by the user is correct."""
-        user = st.session_state.get("username", "")
-        pwd = st.session_state.get("password", "")
-        
-        if user in available_passwords and pwd == available_passwords[user]:
-            st.session_state["password_correct"] = True
-            st.session_state["logged_user"] = user
-            del st.session_state["password"]
-            del st.session_state["username"]
-        else:
-            st.session_state["password_correct"] = False
-
-    if "password_correct" not in st.session_state:
-        st.markdown('<div class="login-header"><h1>Sistema de Avaliação de Prompts</h1><p>Acesse com suas credenciais para continuar</p></div>', unsafe_allow_html=True)
-        col_l, col_m, col_r = st.columns([1, 2, 1])
-        with col_m:
-            with st.container(border=True):
-                st.text_input("Usuário", on_change=password_entered, key="username")
-                st.text_input("Senha", type="password", on_change=password_entered, key="password")
-                st.button("Entrar", on_click=password_entered)
-        return False
-    elif not st.session_state["password_correct"]:
-        st.markdown('<div class="login-header"><h1>Sistema de Avaliação de Prompts</h1><p>Acesse com suas credenciais para continuar</p></div>', unsafe_allow_html=True)
-        col_l, col_m, col_r = st.columns([1, 2, 1])
-        with col_m:
-            with st.container(border=True):
-                st.text_input("Usuário", on_change=password_entered, key="username")
-                st.text_input("Senha", type="password", on_change=password_entered, key="password")
-                st.button("Entrar", on_click=password_entered)
-                st.error("😕 Usuário ou senha incorretos")
-        return False
-    else:
+    if st.session_state.get("password_correct", False):
         return True
+
+    st.markdown('<div class="login-header"><h1>Sistema de Avaliação de Prompts</h1><p>Acesse com suas credenciais para continuar</p></div>', unsafe_allow_html=True)
+    col_l, col_m, col_r = st.columns([1, 2, 1])
+    with col_m:
+        with st.container(border=True):
+            with st.form("login_form"):
+                username = st.text_input("Usuário")
+                password = st.text_input("Senha", type="password")
+                submit = st.form_submit_button("Entrar", use_container_width=True)
+                
+                if submit:
+                    if username in available_passwords and password == available_passwords[username]:
+                        st.session_state["password_correct"] = True
+                        st.session_state["logged_user"] = username
+                        st.rerun()
+                    else:
+                        st.error("😕 Usuário ou senha incorretos")
+    return False
 
 if not check_password():
     st.stop()
 
+# ── Perfil do Avaliador (Primeira vez) ────────────────────────────────────────
+# Verifica se o avaliador já preencheu o perfil (uma vez por sessão)
+if "profile_complete" not in st.session_state:
+    existing_profile = db.get_profile(st.session_state.logged_user)
+    st.session_state["profile_complete"] = existing_profile is not None
+
+if not st.session_state["profile_complete"]:
+    # Tela de onboarding — bloqueia o acesso até preencher
+    st.markdown("""
+    <style>
+    .profile-header { text-align: center; padding: 2rem 0 1rem; }
+    .profile-header h1 { font-size: 2rem; }
+    .profile-header p  { color: var(--text-soft); font-size: 1.05rem; }
+    </style>
+    <div class="profile-header">
+        <h1>Bem-vindo ao Sistema de Avaliação 👋</h1>
+        <p>Antes de começar, precisamos conhecer um pouco sobre você.<br>
+           Essas informações serão salvas apenas uma vez.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_l, col_c, col_r = st.columns([1, 2, 1])
+    with col_c:
+        with st.container(border=True):
+            st.subheader("Seu Perfil")
+            with st.form("profile_form"):
+                nome = st.text_input("Nome Completo *")
+                formacao = st.text_input("Formação *",
+                    placeholder="Ex: Psicologia, Medicina, Pedagogia…")
+                idade = st.number_input("Idade *", min_value=18, max_value=100, step=1)
+                area = st.text_input("Área de Atuação *",
+                    placeholder="Ex: Saúde, Educação, Tecnologia…")
+                submitted = st.form_submit_button("Salvar e Continuar →", use_container_width=True)
+
+                if submitted:
+                    errors = []
+                    if not nome.strip():
+                        errors.append("Nome Completo é obrigatório.")
+                    if not formacao.strip():
+                        errors.append("Formação é obrigatória.")
+                    if not area.strip():
+                        errors.append("Área de Atuação é obrigatória.")
+
+                    if errors:
+                        for e in errors:
+                            st.error(e)
+                    else:
+                        profile_data = {
+                            "usuario":       st.session_state.logged_user,
+                            "nome_completo": nome.strip(),
+                            "formacao":      formacao.strip(),
+                            "idade":         int(idade),
+                            "area_atuacao":  area.strip(),
+                            "data_cadastro": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        }
+                        if db.save_profile(profile_data):
+                            st.session_state["profile_complete"] = True
+                            st.success("Perfil salvo! Redirecionando…")
+                            st.rerun()
+                        else:
+                            st.error("Não foi possível salvar o perfil. Tente novamente.")
+    st.stop()   # impede renderizar o dashboard enquanto o perfil não está completo
+
+# ── Dashboard de Avaliação ─────────────────────────────────────────────────────
 def load_data(file_path):
     if not os.path.exists(file_path):
         return []
@@ -267,19 +317,49 @@ else:
     if not all_evals.empty:
         evaluated_titles = all_evals[all_evals['avaliador'] == st.session_state.logged_user]['email_original'].tolist()
     
-    student_options = []
-    student_to_title = {}
+    total_students = len(data)
+    user_role = st.session_state.logged_user
     
-    for conv in data:
+    DEFAULT_PASSWORDS = {"admin": "admin", "avaliador1": "1234", "avaliador2": "5678"}
+    available_passwords = st.secrets.get("passwords", DEFAULT_PASSWORDS)
+    avaliadores_list = sorted([u for u in available_passwords.keys() if u.startswith("avaliador")])
+    num_avaliadores = len(avaliadores_list) if avaliadores_list else 1
+    
+    if user_role in ["admin", "taciana"]:
+        filtered_indices = range(total_students)
+    elif user_role in avaliadores_list:
+        idx = avaliadores_list.index(user_role)
+        chunk_size = total_students // num_avaliadores
+        remainder = total_students % num_avaliadores
+        start = idx * chunk_size + min(idx, remainder)
+        end = start + chunk_size + (1 if idx < remainder else 0)
+        filtered_indices = range(start, end)
+    else:
+        filtered_indices = []
+
+    # Mapa: título real → ID anonimizado ("Estudante 1", "Estudante 2", ...)
+    # A ordem é estável (baseada na posição no JSON), garantindo consistência
+    student_options = []           # IDs exibidos no dropdown
+    student_to_title = {}          # "Estudante N" → título real
+    title_to_anon = {}             # título real → "Estudante N"
+
+    for i, conv in enumerate(data):
         title = conv.get('title', 'Sem Título')
-        name = extract_name(title)
+        anon_id = f"Estudante {i+1}"
         
-        student_options.append(name)
-        student_to_title[name] = title
+        if i in filtered_indices:
+            student_options.append(anon_id)
+            
+        student_to_title[anon_id] = title
+        title_to_anon[title] = anon_id
+
+    if not student_options:
+        st.warning("Nenhum estudante atribuído a você no momento.")
+        st.stop()
 
     selected_display = st.sidebar.selectbox("Selecione o Estudante", options=student_options)
     selected_student_title = student_to_title[selected_display]
-    selected_name = extract_name(selected_student_title)
+    selected_name = selected_display   # usa o ID anonimizado para exibição
     
     # Get current conversation
     selected_conv = next(conv for conv in data if conv.get('title') == selected_student_title)
@@ -371,16 +451,19 @@ else:
     st.sidebar.markdown("---")
     st.sidebar.subheader("Exportação de Dados")
     
-    all_evals_df = db.get_all_evaluations()
-    
-    if not all_evals_df.empty:
-        csv = all_evals_df.to_csv(index=False).encode('utf-8')
-        st.sidebar.download_button(
-            label="Baixar Relatório Completo (CSV)",
-            data=csv,
-            file_name=f"relatorio_avaliacoes_db_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime='text/csv',
-        )
-        st.sidebar.info(f"Total de avaliações no banco: {len(all_evals_df)}")
+    if st.session_state.logged_user in ["admin", "taciana"]:
+        all_evals_df = db.get_all_evaluations()
+        
+        if not all_evals_df.empty:
+            csv = all_evals_df.to_csv(index=False).encode('utf-8')
+            st.sidebar.download_button(
+                label="Baixar Relatório Completo (CSV)",
+                data=csv,
+                file_name=f"relatorio_avaliacoes_db_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime='text/csv',
+            )
+            st.sidebar.info(f"Total de avaliações no banco: {len(all_evals_df)}")
+        else:
+            st.sidebar.warning("Nenhuma avaliação no banco de dados.")
     else:
-        st.sidebar.warning("Nenhuma avaliação no banco de dados.")
+        st.sidebar.info("Exportação restrita a administradores.")

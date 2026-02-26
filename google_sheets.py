@@ -1,3 +1,4 @@
+import os
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
@@ -53,14 +54,78 @@ def get_sheet():
 
         client = gspread.authorize(creds)
         sh = client.open_by_key(spreadsheet_id)
-        return sh.get_worksheet(0)
+        return sh.get_worksheet(0), sh
     except Exception as e:
         st.error(f"Erro na conexão com Google Sheets: {e}")
+        return None, None
+
+def get_profile_sheet():
+    """Connects and returns Sheet 2 (perfil dos avaliadores). Creates if absent."""
+    try:
+        ws1, sh = get_sheet()
+        if not sh:
+            return None
+        try:
+            ws2 = sh.get_worksheet(1)
+        except Exception:
+            ws2 = sh.add_worksheet(title="Perfil Avaliadores", rows=200, cols=10)
+        return ws2
+    except Exception as e:
+        st.error(f"Erro ao acessar aba de perfis: {e}")
         return None
+
+
+def get_profile(username: str):
+    """Returns the profile dict for a given username, or None if not found."""
+    ws2 = get_profile_sheet()
+    if not ws2:
+        return None
+    records = ws2.get_all_records()
+    for r in records:
+        if r.get("usuario") == username:
+            return r
+    return None
+
+
+def save_profile(profile_data: dict):
+    """
+    Saves or updates evaluator profile to Sheet 2.
+    profile_data must have: usuario, nome_completo, formacao, idade, area_atuacao, data_cadastro
+    """
+    try:
+        ws2 = get_profile_sheet()
+        if not ws2:
+            return False
+
+        headers = ["usuario", "nome_completo", "formacao", "idade", "area_atuacao", "data_cadastro"]
+
+        # Ensure headers exist
+        existing_headers = ws2.row_values(1)
+        if not existing_headers or existing_headers != headers:
+            if not existing_headers:
+                ws2.append_row(headers)
+            else:
+                ws2.update("A1:F1", [headers])
+
+        records = ws2.get_all_records()
+        row_data = [profile_data.get(h, "") for h in headers]
+
+        # Check if user already has a row
+        for idx, r in enumerate(records):
+            if r.get("usuario") == profile_data["usuario"]:
+                ws2.update(f"A{idx + 2}:F{idx + 2}", [row_data])
+                return True
+
+        ws2.append_row(row_data)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar perfil: {e}")
+        return False
+
 
 def init_sheet():
     """Ensures the header exists in the sheet."""
-    sheet = get_sheet()
+    sheet, _ = get_sheet()
     if not sheet:
         return False
     
@@ -82,7 +147,7 @@ def init_sheet():
 def save_evaluation(eval_data):
     """Saves or updates an evaluation in Google Sheets."""
     try:
-        sheet = get_sheet()
+        sheet, _ = get_sheet()
         if not sheet:
             return False
         
@@ -114,7 +179,7 @@ def save_evaluation(eval_data):
 
 def get_evaluation(user_key):
     """Retrieves an evaluation by user_key."""
-    sheet = get_sheet()
+    sheet, _ = get_sheet()
     if not sheet:
         return None
     
@@ -129,7 +194,7 @@ def get_evaluation(user_key):
 
 def get_all_evaluations():
     """Retrieves all evaluations as a pandas DataFrame."""
-    sheet = get_sheet()
+    sheet, _ = get_sheet()
     if not sheet:
         return pd.DataFrame()
     
