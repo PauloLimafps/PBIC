@@ -179,9 +179,7 @@ def check_password():
             st.session_state["logged_user"] = user
             if "login_error" in st.session_state:
                 del st.session_state["login_error"]
-            # Clear passwords from state securely
-            if "password_input" in st.session_state:
-                del st.session_state["password_input"]
+            st.rerun()
         else:
             st.session_state["password_correct"] = False
             st.session_state["login_error"] = True
