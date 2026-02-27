@@ -5,20 +5,14 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 
-# Configuration
-# It's recommended to use st.secrets for these in production
-# {
-#   "spreadsheet_id": "YOUR_SPREADSHEET_ID",
-#   "credentials_file": "credentials.json"
-# }
+# ─── Conexão com Google Sheets ────────────────────────────────────────────────
 
 def get_sheet():
-    """Connects to Google Sheets and returns the worksheet."""
+    """Conecta ao Google Sheets e retorna (worksheet_aba1, spreadsheet)."""
     try:
         creds_info = None
         spreadsheet_id = None
 
-        # 1. Try to get from st.secrets (Streamlit Cloud preferred)
         if "google_sheets" in st.secrets:
             creds_info = st.secrets["google_sheets"]["credentials"]
             spreadsheet_id = st.secrets["google_sheets"].get("spreadsheet_id")
@@ -27,30 +21,26 @@ def get_sheet():
             spreadsheet_id = st.secrets.get("spreadsheet_id")
 
         if creds_info and spreadsheet_id:
-            # Fix common formatting issues with private_key from secrets
             info = dict(creds_info)
             if "private_key" in info:
                 info["private_key"] = info["private_key"].replace("\\n", "\n")
-                
             creds = Credentials.from_service_account_info(
-                info, 
+                info,
                 scopes=["https://www.googleapis.com/auth/spreadsheets"]
             )
-        # 2. Try Local Fallback (credentials.json)
         elif os.path.exists("credentials.json"):
-            # Use the ID provided by the user as fallback or look in st.session_state
             spreadsheet_id = "1TqWL2Q03uDAtJKkKvA8Hb2fHXwp2GrCpJXk-k1ntgMg"
             creds = Credentials.from_service_account_file(
                 "credentials.json",
                 scopes=["https://www.googleapis.com/auth/spreadsheets"]
             )
         else:
-            st.error("Configuração de Google Sheets ausente. Por favor, configure os 'Secrets' no dashboard do Streamlit.")
-            return None
-            
+            st.error("Configuração de Google Sheets ausente.")
+            return None, None
+
         if not spreadsheet_id:
             st.error("ID da Planilha não encontrado nos segredos.")
-            return None
+            return None, None
 
         client = gspread.authorize(creds)
         sh = client.open_by_key(spreadsheet_id)
@@ -59,70 +49,91 @@ def get_sheet():
         st.error(f"Erro na conexão com Google Sheets: {e}")
         return None, None
 
+
 def get_profile_sheet():
-    """Connects and returns Sheet 2 (perfil dos avaliadores). Creates if absent."""
+    """Retorna a aba 'Perfil Avaliadores' (cria se não existir)."""
     try:
-        ws1, sh = get_sheet()
+        _, sh = get_sheet()
         if not sh:
             return None
         try:
             ws2 = sh.get_worksheet(1)
         except Exception:
-            ws2 = sh.add_worksheet(title="Perfil Avaliadores", rows=200, cols=10)
+            ws2 = sh.add_worksheet(title="Perfil Avaliadores", rows=500, cols=15)
         return ws2
     except Exception as e:
         st.error(f"Erro ao acessar aba de perfis: {e}")
         return None
 
 
+# ─── Campos de Perfil ─────────────────────────────────────────────────────────
+
+PROFILE_HEADERS = [
+    "usuario",
+    "nome_completo",
+    "formacao",
+    "idade",
+    "area_atuacao",
+    "sexo",
+    "pos_graduacao",
+    "pos_graduacao_area",
+    "mestrado",
+    "mestrado_area",
+    "tipo_uso_ia",
+    "experiencia_ia",
+    "data_cadastro",
+]
+
+NUM_PROFILE_COLS = len(PROFILE_HEADERS)   # 13
+
+
 def get_profile(username: str):
     """
-    Returns a tuple (found, profile):
-      - (True,  dict)  → user exists in Sheets (profile filled)
-      - (False, None)  → user does NOT exist yet (needs to fill form)
-      - (None,  None)  → connection/read error (treat as ambiguous)
+    Retorna (found, profile_dict):
+      - (True,  dict)  → usuário existe (perfil preenchido)
+      - (False, None)  → usuário novo (precisa preencher perfil)
+      - (None,  None)  → erro de conexão (ambíguo)
     """
     ws2 = get_profile_sheet()
     if not ws2:
-        return None, None   # connection error — ambiguous
+        return None, None
     try:
         records = ws2.get_all_records()
     except Exception as e:
         st.warning(f"Não foi possível verificar perfil: {e}")
-        return None, None   # read error — ambiguous
+        return None, None
     for r in records:
         if r.get("usuario") == username:
-            return True, r  # found!
-    return False, None      # not found → new user
+            return True, r
+    return False, None
 
 
 def save_profile(profile_data: dict):
     """
-    Saves or updates evaluator profile to Sheet 2.
-    profile_data must have: usuario, nome_completo, formacao, idade, area_atuacao, data_cadastro
+    Salva ou atualiza o perfil do avaliador na aba 2.
+    Campos esperados: usuario, nome_completo, formacao, idade, area_atuacao,
+                      sexo, pos_graduacao, experiencia_ia, data_cadastro
     """
     try:
         ws2 = get_profile_sheet()
         if not ws2:
             return False
 
-        headers = ["usuario", "nome_completo", "formacao", "idade", "area_atuacao", "data_cadastro"]
-
-        # Ensure headers exist
+        # Garante cabeçalhos corretos
+        col_letter = chr(ord('A') + NUM_PROFILE_COLS - 1)  # 'M'
         existing_headers = ws2.row_values(1)
-        if not existing_headers or existing_headers != headers:
+        if not existing_headers or existing_headers != PROFILE_HEADERS:
             if not existing_headers:
-                ws2.append_row(headers)
+                ws2.append_row(PROFILE_HEADERS)
             else:
-                ws2.update("A1:F1", [headers])
+                ws2.update(f"A1:{col_letter}1", [PROFILE_HEADERS])
 
         records = ws2.get_all_records()
-        row_data = [profile_data.get(h, "") for h in headers]
+        row_data = [profile_data.get(h, "") for h in PROFILE_HEADERS]
 
-        # Check if user already has a row
         for idx, r in enumerate(records):
             if r.get("usuario") == profile_data["usuario"]:
-                ws2.update(f"A{idx + 2}:F{idx + 2}", [row_data])
+                ws2.update(f"A{idx + 2}:{col_letter}{idx + 2}", [row_data])
                 return True
 
         ws2.append_row(row_data)
@@ -132,80 +143,73 @@ def save_profile(profile_data: dict):
         return False
 
 
+# ─── Planilha Principal (Avaliações) ──────────────────────────────────────────
+
+EVAL_HEADERS = [
+    "user_key", "estudante", "email_original", "avaliador",
+    "denomine", "defina", "descreva", "de_contexto", "delimite",
+    "declare", "determine", "observacoes_col", "data_criacao"
+]
+
+
 def init_sheet():
-    """Ensures the header exists in the sheet."""
+    """Garante que o cabeçalho existe na aba 1."""
     sheet, _ = get_sheet()
     if not sheet:
         return False
-    
-    headers = [
-        "user_key", "estudante", "email_original", "avaliador", 
-        "denomine", "defina", "descreva", "de_contexto", "delimite", 
-        "declare", "determine", "observacoes_col", "data_criacao"
-    ]
-    
+
     existing_headers = sheet.row_values(1)
-    if not existing_headers or existing_headers != headers:
+    if not existing_headers or existing_headers != EVAL_HEADERS:
         if not existing_headers:
-            sheet.append_row(headers)
+            sheet.append_row(EVAL_HEADERS)
         else:
-            # Update the first row specifically
-            sheet.update('A1:M1', [headers])
+            sheet.update('A1:M1', [EVAL_HEADERS])
     return True
 
+
 def save_evaluation(eval_data):
-    """Saves or updates an evaluation in Google Sheets."""
+    """Salva ou atualiza uma avaliação no Google Sheets."""
     try:
         sheet, _ = get_sheet()
         if not sheet:
             return False
-        
-        # Get all values to find if user_key already exists
+
         records = sheet.get_all_records()
         df = pd.DataFrame(records)
-        
-        headers = [
-            "user_key", "estudante", "email_original", "avaliador", 
-            "denomine", "defina", "descreva", "de_contexto", "delimite", 
-            "declare", "determine", "observacoes_col", "data_criacao"
-        ]
-        
-        # Prepare row data in correct order
-        row_to_save = [eval_data.get(h, "") for h in headers]
-        
+        row_to_save = [eval_data.get(h, "") for h in EVAL_HEADERS]
+
         if not df.empty and eval_data['user_key'] in df['user_key'].values:
-            # Update existing row
-            # gspread uses 1-based indexing, headers are row 1
             row_idx = df[df['user_key'] == eval_data['user_key']].index[0] + 2
             sheet.update(f'A{row_idx}:M{row_idx}', [row_to_save])
         else:
-            # Append new row
             sheet.append_row(row_to_save)
         return True
     except Exception as e:
         st.error(f"Erro específico ao salvar: {e}")
         return False
 
+
 def get_evaluation(user_key):
-    """Retrieves an evaluation by user_key."""
+    """Recupera uma avaliação pelo user_key."""
     sheet, _ = get_sheet()
     if not sheet:
         return None
-    
+
     records = sheet.get_all_records()
     if not records:
         return None
-        
+
     for record in records:
         if record.get('user_key') == user_key:
             return record
     return None
 
+
 def get_all_evaluations():
-    """Retrieves all evaluations as a pandas DataFrame."""
+    """Retorna todas as avaliações como DataFrame."""
     sheet, _ = get_sheet()
     if not sheet:
         return pd.DataFrame()
-    
+
     records = sheet.get_all_records()
     return pd.DataFrame(records)
