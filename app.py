@@ -412,6 +412,61 @@ if st.session_state.logged_user in ADMIN_USERS:
 
 st.markdown("---")
 
+# ── Guia dos 7 Ds de um bom prompt ────────────────────────────────────────────
+with st.expander("Guia: Os 7 Ds de um Bom Prompt — clique para expandir", expanded=False):
+    st.markdown("""
+    <style>
+    .d-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 8px; }
+    .d-card  { background: var(--bg-card); border: 1px solid var(--border); border-left: 4px solid var(--primary);
+               border-radius: 10px; padding: 14px 16px; }
+    .d-card h4 { margin: 0 0 6px; font-size: 1rem; color: var(--primary); font-family: 'Outfit', sans-serif; }
+    .d-card p  { margin: 0; font-size: .88rem; color: var(--text-soft); line-height: 1.5; }
+    </style>
+    <div class="d-grid">
+      <div class="d-card">
+        <h4>1. Denominar uma Persona</h4>
+        <p>O estudante atribuiu um papel ou identidade à IA?<br>
+           Ex.: <em>"Aja como um psicólogo clínico"</em>, <em>"Você é um professor do ensino médio"</em>.<br>
+           Uma persona bem definida guia o tom e o nível de resposta da IA.</p>
+      </div>
+      <div class="d-card">
+        <h4>2. Definir uma Tarefa</h4>
+        <p>O estudante deixou claro o que a IA deve fazer?<br>
+           Ex.: <em>"Crie um plano de aula"</em>, <em>"Resuma o texto abaixo"</em>.<br>
+           A tarefa deve ser específica e orientada a uma ação concreta.</p>
+      </div>
+      <div class="d-card">
+        <h4>3. Descrever as Etapas</h4>
+        <p>O estudante indicou o passo a passo para executar a tarefa?<br>
+           Ex.: <em>"Primeiro analise X, depois liste Y, por fim elabore Z"</em>.<br>
+           Etapas claras evitam respostas genéricas e garantem organização.</p>
+      </div>
+      <div class="d-card">
+        <h4>4. Dar Contexto</h4>
+        <p>O estudante forneceu informações de fundo necessárias?<br>
+           Ex.: público-alvo, disciplina, nível dos alunos, situação do problema.<br>
+           Sem contexto, a IA tende a dar respostas muito amplas ou imprecisas.</p>
+      </div>
+      <div class="d-card">
+        <h4>5. Delimitar Restrições</h4>
+        <p>O estudante indicou o que a IA <strong>não</strong> deve fazer ou como deve limitar a resposta?<br>
+           Ex.: <em>"Não use termos técnicos"</em>, <em>"Responda em até 200 palavras"</em>, <em>"Evite exemplos com violência"</em>.</p>
+      </div>
+      <div class="d-card">
+        <h4>6. Declarar o Objetivo</h4>
+        <p>O estudante explicou <em>por que</em> precisa da resposta?<br>
+           Ex.: <em>"O objetivo é engajar alunos do 6º ano"</em>, <em>"Quero convencer minha equipe"</em>.<br>
+           O objetivo final orienta a relevância e o foco da resposta da IA.</p>
+      </div>
+      <div class="d-card">
+        <h4>7. Determinar a Saída</h4>
+        <p>O estudante especificou o formato ou tipo de resposta esperada?<br>
+           Ex.: <em>"Responda em lista com marcadores"</em>, <em>"Gere uma tabela"</em>, <em>"Escreva em tom formal"</em>.<br>
+           Definir a saída evita retrabalho e melhora a usabilidade da resposta.</p>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # ── Dados & Distribuição ───────────────────────────────────────────────────────
 data = load_data('conversations.json')
 
