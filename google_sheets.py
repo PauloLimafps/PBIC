@@ -108,6 +108,29 @@ def get_profile(username: str):
     return False, None
 
 
+def get_user_order_index(username: str, admin_users: list) -> int:
+    """
+    Retorna o índice sequencial (0-based) do usuário entre os não-admins,
+    na ordem em que foram cadastrados na planilha.
+      - 1º usuário cadastrado → 0
+      - 2º usuário → 1
+      - etc.
+    Retorna 0 em caso de erro/fallback.
+    """
+    ws2 = get_profile_sheet()
+    if not ws2:
+        return 0
+    try:
+        records = ws2.get_all_records()
+    except Exception:
+        return 0
+    non_admin = [r for r in records if r.get("usuario") not in admin_users]
+    for idx, r in enumerate(non_admin):
+        if r.get("usuario") == username:
+            return idx
+    return 0
+
+
 def save_profile(profile_data: dict):
     """
     Salva ou atualiza o perfil do avaliador na aba 2.

@@ -3,7 +3,6 @@ import pandas as pd
 import json
 import os
 import re
-import hashlib
 from datetime import datetime
 import google_sheets as db
 
@@ -189,6 +188,11 @@ if "profile_complete" not in st.session_state:
         found, profile_data = db.get_profile(st.session_state.logged_user)
     if found is True:
         st.session_state["profile_complete"] = True
+        # Busca e cacheia a posição sequencial do usuário (para distribuição de estudantes)
+        if "user_order" not in st.session_state and st.session_state.logged_user not in ADMIN_USERS:
+            st.session_state["user_order"] = db.get_user_order_index(
+                st.session_state.logged_user, ADMIN_USERS
+            )
     elif found is False:
         st.session_state["profile_complete"] = False
     else:
@@ -333,6 +337,11 @@ if st.session_state["profile_complete"] is False:
                     }
                     if db.save_profile(profile_payload):
                         st.session_state["profile_complete"] = True
+                        # Cacheia a posição sequencial para distribuição de estudantes
+                        if st.session_state.logged_user not in ADMIN_USERS:
+                            st.session_state["user_order"] = db.get_user_order_index(
+                                st.session_state.logged_user, ADMIN_USERS
+                            )
                         st.success("✅ Perfil salvo! Redirecionando…")
                         st.rerun()
                     else:
@@ -365,18 +374,22 @@ def parse_messages(mapping):
 
 def get_student_indices(username: str, total: int) -> range:
     """
-    Retorna o intervalo de estudantes atribuído a este avaliador.
-    Baseado em hash MD5 do nome → grupo fixo de ~20 alunos.
-    Admin/Taciana recebem todos.
+    Distribuição sequencial por ordem de cadastro, grupos de 10.
+    - admin / taciana → todos os estudantes
+    - 1º usuário cadastrado → estudantes 1-10
+    - 2º usuário → 11-20
+    - ... e quando acabar os grupos, volta do início (rotação circular)
+    A ordem sequencial é lida do Google Sheets (session_state faz cache).
     """
     if username in ADMIN_USERS:
         return range(total)
-    GROUP_SIZE = 20
+    GROUP_SIZE = 10
     num_groups = max(1, total // GROUP_SIZE)
-    h = int(hashlib.md5(username.encode()).hexdigest(), 16)
-    group_idx = h % num_groups
+    # user_order é cacheado na session_state para evitar chamada extra ao Sheets
+    user_order = st.session_state.get("user_order", 0)
+    group_idx = user_order % num_groups
     start = group_idx * GROUP_SIZE
-    end = min(start + GROUP_SIZE, total)
+    end   = min(start + GROUP_SIZE, total)
     return range(start, end)
 
 
