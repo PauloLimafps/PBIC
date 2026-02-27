@@ -560,7 +560,7 @@ else:
                 value=db_eval.get('observacoes_col', "") if db_eval else "",
                 height=100,
             )
-            submit = st.form_submit_button("Guardar no Google Sheets")
+            submit = st.form_submit_button("Salvar Avaliação")
 
             pendentes = [p for p, v in p_values.items() if v == "Pendente"]
 
@@ -582,7 +582,7 @@ else:
                     if db.save_evaluation(evaluation_entry):
                         st.success(f"✅ Avaliação de {selected_name} salva com sucesso!")
                     else:
-                        st.error("Erro ao salvar no Google Sheets. Verifique a configuração.")
+                        st.error("Erro ao salvar. Verifique a configuração.")
 
     # ── Exportação (somente admin/taciana) ─────────────────────────────────────
     st.sidebar.markdown("---")
