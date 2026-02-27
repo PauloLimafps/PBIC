@@ -76,15 +76,24 @@ def get_profile_sheet():
 
 
 def get_profile(username: str):
-    """Returns the profile dict for a given username, or None if not found."""
+    """
+    Returns a tuple (found, profile):
+      - (True,  dict)  → user exists in Sheets (profile filled)
+      - (False, None)  → user does NOT exist yet (needs to fill form)
+      - (None,  None)  → connection/read error (treat as ambiguous)
+    """
     ws2 = get_profile_sheet()
     if not ws2:
-        return None
-    records = ws2.get_all_records()
+        return None, None   # connection error — ambiguous
+    try:
+        records = ws2.get_all_records()
+    except Exception as e:
+        st.warning(f"Não foi possível verificar perfil: {e}")
+        return None, None   # read error — ambiguous
     for r in records:
         if r.get("usuario") == username:
-            return r
-    return None
+            return True, r  # found!
+    return False, None      # not found → new user
 
 
 def save_profile(profile_data: dict):

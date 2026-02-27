@@ -207,12 +207,36 @@ if not check_password():
     st.stop()
 
 # ── Perfil do Avaliador (Primeira vez) ────────────────────────────────────────
-# Verifica se o avaliador já preencheu o perfil (uma vez por sessão)
+# Verifica no Google Sheets se o usuário já preencheu o perfil.
+# Usa session_state para evitar chamadas repetidas ao Sheets durante a mesma sessão.
+# Lógica:
+#   profile_complete = True   → perfil já existe no Sheets, pular formulário
+#   profile_complete = False  → usuário novo, exibir formulário
+#   profile_complete = None   → erro de conexão, tentar novamente
 if "profile_complete" not in st.session_state:
-    existing_profile = db.get_profile(st.session_state.logged_user)
-    st.session_state["profile_complete"] = existing_profile is not None
+    with st.spinner("Verificando seu cadastro no banco de dados…"):
+        found, profile_data = db.get_profile(st.session_state.logged_user)
+    # found = True  → existe; False → novo usuário; None → erro de conexão
+    if found is True:
+        st.session_state["profile_complete"] = True
+    elif found is False:
+        st.session_state["profile_complete"] = False   # novo usuário
+    else:
+        # Erro de conexão: manter como None para tentar de novo no próximo rerun
+        st.session_state["profile_complete"] = None
 
-if not st.session_state["profile_complete"]:
+if st.session_state.get("profile_complete") is None:
+    # Houve erro de conexão com Google Sheets — não sabemos o status do usuário
+    st.warning(
+        "⚠️ Não foi possível verificar seu cadastro no Google Sheets. "
+        "Verifique sua conexão e clique em Tentar Novamente."
+    )
+    if st.button("🔄 Tentar Novamente"):
+        del st.session_state["profile_complete"]  # força nova verificação
+        st.rerun()
+    st.stop()
+
+if st.session_state["profile_complete"] is False:
     # Tela de onboarding — bloqueia o acesso até preencher
     st.markdown("""
     <style>
@@ -314,7 +338,9 @@ with col_logout:
     st.write("") # vertical spacing
     st.markdown('<div class="logout-btn">', unsafe_allow_html=True)
     if st.button("Sair"):
-        st.session_state.password_correct = False
+        # Limpa todo o estado de sessão para garantir re-verificação no próximo login
+        for key in ["password_correct", "logged_user", "profile_complete"]:
+            st.session_state.pop(key, None)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
