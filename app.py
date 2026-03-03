@@ -384,7 +384,7 @@ def get_student_indices(username: str, total: int) -> range:
     if username in ADMIN_USERS:
         return range(total)
     GROUP_SIZE = 10
-    num_groups = max(1, total // GROUP_SIZE)
+    num_groups = (total + GROUP_SIZE - 1) // GROUP_SIZE
     # user_order é cacheado na session_state para evitar chamada extra ao Sheets
     user_order = st.session_state.get("user_order", 0)
     group_idx = user_order % num_groups
