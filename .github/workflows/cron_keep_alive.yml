@@ -1,0 +1,16 @@
+name: Manter Streamlit Ativo
+
+on:
+  schedule:
+    # Roda a cada 6 horas para evitar a hibernação de 12h
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Permite rodar manualmente para testar
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Streamlit App
+        run: |
+          # Substitua a URL abaixo pela URL real do seu app
+          curl -I https://pbic-avaliacao.streamlit.app/
