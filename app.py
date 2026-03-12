@@ -357,18 +357,31 @@ def load_data(file_path):
         return json.load(f)
 
 
-def parse_messages(mapping):
+def parse_messages(mapping, current_node):
     messages = []
-    for node_id, node in mapping.items():
+    node_id = current_node
+    
+    while node_id:
+        node = mapping.get(node_id)
+        if not node:
+            break
+            
         msg_obj = node.get('message')
         if msg_obj and msg_obj.get('author') and msg_obj.get('content'):
             role = msg_obj['author']['role']
             content = msg_obj['content'].get('parts', [])
             create_time = msg_obj.get('create_time') or 0
-            text = " ".join([str(p) for p in content if p and str(p).strip()])
-            if text:
-                messages.append({'role': role, 'text': text, 'time': create_time})
-    messages.sort(key=lambda x: (x['time'] or 0))
+            
+            # Filter valid roles and non-empty content
+            if role in ['user', 'assistant']:
+                text = " ".join([str(p) for p in content if p and isinstance(p, str) and str(p).strip()])
+                if text:
+                    messages.append({'role': role, 'text': text, 'time': create_time})
+        
+        node_id = node.get('parent')
+        
+    # Since we traversed from end to start, reverse the list
+    messages.reverse()
     return messages
 
 
@@ -507,7 +520,7 @@ else:
     selected_name = selected_display
 
     selected_conv = next(conv for conv in data if conv.get('title') == selected_student_title)
-    messages = parse_messages(selected_conv.get('mapping', {}))
+    messages = parse_messages(selected_conv.get('mapping', {}), selected_conv.get('current_node'))
 
     col1, col2 = st.columns([2, 1])
 
