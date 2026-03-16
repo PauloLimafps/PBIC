@@ -556,13 +556,13 @@ else:
             db_eval  = db.get_evaluation(user_key)
 
             pillars = [
-                ("denomine",   "1. Denominar uma persona"),
-                ("defina",     "2. Definir uma tarefa"),
-                ("descreva",   "3. Descrever as etapas"),
+                ("denomine_persona",   "1. Denominar uma persona"),
+                ("defina_tarefa",     "2. Definir uma tarefa"),
+                ("descreva_etapas",   "3. Descrever as etapas"),
                 ("de_contexto","4. Dar contexto"),
-                ("delimite",   "5. Delimitar restrições"),
-                ("declare",    "6. Declarar o objetivo"),
-                ("determine",  "7. Determinar a Saída"),
+                ("delimite_restricoes",   "5. Delimitar restrições"),
+                ("declare_objetivo",    "6. Declarar o objetivo"),
+                ("determine_saida",  "7. Determinar a Saída"),
             ]
 
             with st.form(key=f'eval_form_{user_key}'):
@@ -623,7 +623,7 @@ else:
             
             # 1. Distribution by Pillar
             st.subheader("Desempenho por Pilar (7 Ds)")
-            pillars_cols = ["Persona", "Tarefa", "Etapas", "Contexto", "Restrições", "Objetivo", "Saída"]
+            pillars_cols = ["denomine_persona", "defina_tarefa", "descreva_etapas", "de_contexto", "delimite_restricoes", "declare_objetivo", "determine_saida"]
             
             p_data = []
             for col in pillars_cols:
@@ -650,7 +650,7 @@ else:
             
             # 3. List of recent evaluations
             st.subheader("Avaliações Recentes")
-            st.dataframe(all_evals_df[['avaliador', 'estudante', 'defina', 'de_contexto', 'data_criacao']].tail(20), use_container_width=True)
+            st.dataframe(all_evals_df[['avaliador', 'estudante', 'denomine_persona', 'defina_tarefa', 'descreva_etapas', 'de_contexto', 'data_criacao']].tail(20), use_container_width=True)
 
     # ── Exportação (somente admin/taciana) ─────────────────────────────────────
     st.sidebar.markdown("---")
