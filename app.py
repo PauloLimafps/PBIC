@@ -623,7 +623,7 @@ else:
             
             # 1. Distribution by Pillar
             st.subheader("Desempenho por Pilar (7 Ds)")
-            pillars_cols = ["denomine", "defina", "descreva", "de_contexto", "delimite", "declare", "determine"]
+            pillars_cols = ["Persona", "Tarefa", "Etapas", "Contexto", "Restrições", "Objetivo", "Saída"]
             
             p_data = []
             for col in pillars_cols:
