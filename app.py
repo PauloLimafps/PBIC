@@ -188,15 +188,18 @@ if "profile_complete" not in st.session_state:
         found, profile_data = db.get_profile(st.session_state.logged_user)
     if found is True:
         st.session_state["profile_complete"] = True
-        # Busca e cacheia a posição sequencial do usuário (para distribuição de estudantes)
-        if "user_order" not in st.session_state and st.session_state.logged_user not in ADMIN_USERS:
-            st.session_state["user_order"] = db.get_user_order_index(
-                st.session_state.logged_user, ADMIN_USERS
-            )
     elif found is False:
         st.session_state["profile_complete"] = False
     else:
         st.session_state["profile_complete"] = None   # erro de conexão
+
+if st.session_state.get("profile_complete") is True:
+    # Busca e cacheia a posição sequencial do usuário (para distribuição de estudantes)
+    if "user_order" not in st.session_state and st.session_state.logged_user not in ADMIN_USERS:
+        with st.spinner("Carregando sua distribuição de estudantes…"):
+            st.session_state["user_order"] = db.get_user_order_index(
+                st.session_state.logged_user, ADMIN_USERS
+            )
 
 if st.session_state.get("profile_complete") is None:
     st.warning("⚠️ Não foi possível verificar seu cadastro. Verifique sua conexão.")
@@ -388,17 +391,17 @@ def parse_messages(mapping, current_node):
 def get_student_indices(username: str, total: int) -> range:
     """
     Distribuição sequencial por ordem de cadastro, grupos de 10.
-    - admin / taciana → todos os estudantes
-    - 1º usuário cadastrado → estudantes 1-10
-    - 2º usuário → 11-20
-    - ... e quando acabar os grupos, volta do início (rotação circular)
-    A ordem sequencial é lida do Google Sheets (session_state faz cache).
     """
     if username in ADMIN_USERS:
         return range(total)
+    
     GROUP_SIZE = 10
     num_groups = (total + GROUP_SIZE - 1) // GROUP_SIZE
-    # user_order é cacheado na session_state para evitar chamada extra ao Sheets
+    
+    # Se não está no session_state, tenta buscar (fallback de segurança)
+    if "user_order" not in st.session_state:
+        st.session_state["user_order"] = db.get_user_order_index(username, ADMIN_USERS)
+    
     user_order = st.session_state.get("user_order", 0)
     group_idx = user_order % num_groups
     start = group_idx * GROUP_SIZE
@@ -414,7 +417,7 @@ with col_logout:
     st.write("")
     st.markdown('<div class="logout-btn">', unsafe_allow_html=True)
     if st.button("Sair"):
-        for key in ["logged_user", "profile_complete"]:
+        for key in ["logged_user", "profile_complete", "user_order"]:
             st.session_state.pop(key, None)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -423,6 +426,8 @@ st.sidebar.markdown(f"**Avaliador:** {st.session_state.logged_user}")
 if st.session_state.logged_user in ADMIN_USERS:
     st.sidebar.markdown("🔑 *Acesso total*")
 
+# ── Navegação ──────────────────────────────────────────────────────────────────
+page = st.sidebar.radio("Navegação", ["Avaliação", "Dashboard"])
 st.markdown("---")
 
 # ── Guia dos 7 Ds de um bom prompt ────────────────────────────────────────────
@@ -489,11 +494,11 @@ else:
     st.sidebar.header("Seleção de Estudante")
 
     # Avaliações já feitas por este avaliador
-    all_evals = db.get_all_evaluations()
+    all_evals_df = db.get_all_evaluations()
     evaluated_titles = []
-    if not all_evals.empty:
+    if not all_evals_df.empty:
         evaluated_titles = (
-            all_evals[all_evals['avaliador'] == st.session_state.logged_user]
+            all_evals_df[all_evals_df['avaliador'] == st.session_state.logged_user]
             ['email_original'].tolist()
         )
 
@@ -515,94 +520,143 @@ else:
         st.warning("Nenhum estudante atribuído a você no momento.")
         st.stop()
 
-    selected_display = st.sidebar.selectbox("Selecione o Estudante", options=student_options)
-    selected_student_title = student_to_title[selected_display]
-    selected_name = selected_display
+    if page == "Avaliação":
+        selected_display = st.sidebar.selectbox("Selecione o Estudante", options=student_options)
+        selected_student_title = student_to_title[selected_display]
+        selected_name = selected_display
 
-    selected_conv = next(conv for conv in data if conv.get('title') == selected_student_title)
-    messages = parse_messages(selected_conv.get('mapping', {}), selected_conv.get('current_node'))
+        selected_conv = next(conv for conv in data if conv.get('title') == selected_student_title)
+        messages = parse_messages(selected_conv.get('mapping', {}), selected_conv.get('current_node'))
 
-    col1, col2 = st.columns([2, 1])
+        col1, col2 = st.columns([2, 1])
 
-    with col1:
-        is_evaluated = selected_student_title in evaluated_titles
-        status_html = '<span class="status-badge">Já Avaliado</span>' if is_evaluated else ""
-        st.markdown(f'<h3>Histórico de Interação: {selected_name} {status_html}</h3>',
-                    unsafe_allow_html=True)
+        with col1:
+            is_evaluated = selected_student_title in evaluated_titles
+            status_html = '<span class="status-badge">Já Avaliado</span>' if is_evaluated else ""
+            st.markdown(f'<h3>Histórico de Interação: {selected_name} {status_html}</h3>',
+                        unsafe_allow_html=True)
 
-        chat_container = st.container(height=600, border=True)
-        with chat_container:
-            for msg in messages:
-                if msg['role'] == 'user':
-                    st.markdown("---")
-                    st.markdown("**Estudante (Prompt):**")
-                    with st.chat_message("user"):
-                        st.write(msg['text'])
-                elif msg['role'] == 'assistant':
-                    st.markdown("**IA (Resposta):**")
-                    with st.chat_message("assistant"):
-                        st.write(msg['text'])
+            chat_container = st.container(height=600, border=True)
+            with chat_container:
+                for msg in messages:
+                    if msg['role'] == 'user':
+                        st.markdown("---")
+                        st.markdown("**Estudante (Prompt):**")
+                        with st.chat_message("user"):
+                            st.write(msg['text'])
+                    elif msg['role'] == 'assistant':
+                        st.markdown("**IA (Resposta):**")
+                        with st.chat_message("assistant"):
+                            st.write(msg['text'])
 
-    with col2:
-        st.subheader("Critérios de Avaliação")
+        with col2:
+            st.subheader("Critérios de Avaliação")
 
-        user_key = f"{selected_student_title}_{st.session_state.logged_user}"
-        db_eval  = db.get_evaluation(user_key)
+            user_key = f"{selected_student_title}_{st.session_state.logged_user}"
+            db_eval  = db.get_evaluation(user_key)
 
-        pillars = [
-            ("denomine",   "1. Denominar uma persona"),
-            ("defina",     "2. Definir uma tarefa"),
-            ("descreva",   "3. Descrever as etapas"),
-            ("de_contexto","4. Dar contexto"),
-            ("delimite",   "5. Delimitar restrições"),
-            ("declare",    "6. Declarar o objetivo"),
-            ("determine",  "7. Determinar a Saída"),
-        ]
+            pillars = [
+                ("denomine",   "1. Denominar uma persona"),
+                ("defina",     "2. Definir uma tarefa"),
+                ("descreva",   "3. Descrever as etapas"),
+                ("de_contexto","4. Dar contexto"),
+                ("delimite",   "5. Delimitar restrições"),
+                ("declare",    "6. Declarar o objetivo"),
+                ("determine",  "7. Determinar a Saída"),
+            ]
 
-        with st.form(key=f'eval_form_{user_key}'):
-            st.write("Avalie cada pilar:")
-            options = ["Atendeu", "Parcialmente", "Não Atendeu", "Pendente"]
-            p_values = {}
-            for key, label in pillars:
-                db_val = db_eval.get(key, "Pendente") if db_eval else "Pendente"
-                idx = options.index(db_val) if db_val in options else 3
-                p_values[key] = st.radio(f"**{label}**", options, index=idx, horizontal=True)
+            with st.form(key=f'eval_form_{user_key}'):
+                st.write("Avalie cada pilar:")
+                options = ["Atendeu", "Parcialmente", "Não Atendeu", "Pendente"]
+                p_values = {}
+                for key, label in pillars:
+                    db_val = db_eval.get(key, "Pendente") if db_eval else "Pendente"
+                    idx = options.index(db_val) if db_val in options else 3
+                    p_values[key] = st.radio(f"**{label}**", options, index=idx, horizontal=True)
 
-            obs_val = st.text_area(
-                "Observações Gerais",
-                value=db_eval.get('observacoes_col', "") if db_eval else "",
-                height=100,
-            )
-            submit = st.form_submit_button("Salvar Avaliação")
+                obs_val = st.text_area(
+                    "Observações Gerais",
+                    value=db_eval.get('observacoes_col', "") if db_eval else "",
+                    height=100,
+                )
+                submit = st.form_submit_button("Salvar Avaliação")
 
-            pendentes = [p for p, v in p_values.items() if v == "Pendente"]
+                pendentes = [p for p, v in p_values.items() if v == "Pendente"]
 
-            if submit:
-                if pendentes:
-                    st.error(f"Critérios pendentes: {', '.join([p.capitalize() for p in pendentes])}")
-                else:
-                    evaluation_entry = {
-                        'user_key':       user_key,
-                        'estudante':      selected_name,
-                        'email_original': selected_student_title,
-                        'avaliador':      st.session_state.logged_user,
-                        'observacoes_col':obs_val,
-                        'data_criacao':   datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    }
-                    for k, v in p_values.items():
-                        evaluation_entry[k] = v
-
-                    if db.save_evaluation(evaluation_entry):
-                        st.success(f"✅ Avaliação de {selected_name} salva com sucesso!")
+                if submit:
+                    if pendentes:
+                        st.error(f"Critérios pendentes: {', '.join([p.capitalize() for p in pendentes])}")
                     else:
-                        st.error("Erro ao salvar. Verifique a configuração.")
+                        evaluation_entry = {
+                            'user_key':       user_key,
+                            'estudante':      selected_name,
+                            'email_original': selected_student_title,
+                            'avaliador':      st.session_state.logged_user,
+                            'observacoes_col':obs_val,
+                            'data_criacao':   datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        }
+                        for k, v in p_values.items():
+                            evaluation_entry[k] = v
+
+                        if db.save_evaluation(evaluation_entry):
+                            st.success(f"✅ Avaliação de {selected_name} salva com sucesso!")
+                        else:
+                            st.error("Erro ao salvar. Verifique a configuração.")
+
+    elif page == "Dashboard":
+        st.header("📊 Dashboard de Análise de Avaliações")
+        
+        if all_evals_df.empty:
+            st.warning("Nenhuma avaliação registrada ainda para gerar o dashboard.")
+        else:
+            # Stats Summary
+            total_evals = len(all_evals_df)
+            unique_students = all_evals_df['estudante'].nunique()
+            unique_evaluators = all_evals_df['avaliador'].nunique()
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total de Avaliações", total_evals)
+            c2.metric("Estudantes Avaliados", unique_students)
+            c3.metric("Avaliadores Ativos", unique_evaluators)
+            
+            st.markdown("---")
+            
+            # 1. Distribution by Pillar
+            st.subheader("Desempenho por Pilar (7 Ds)")
+            pillars_cols = ["denomine", "defina", "descreva", "de_contexto", "delimite", "declare", "determine"]
+            
+            p_data = []
+            for col in pillars_cols:
+                counts = all_evals_df[col].value_counts()
+                for status in ["Atendeu", "Parcialmente", "Não Atendeu"]:
+                    p_data.append({
+                        "Pilar": col.capitalize(),
+                        "Status": status,
+                        "Quantidade": counts.get(status, 0)
+                    })
+            
+            chart_df = pd.DataFrame(p_data)
+            chart_pivot = chart_df.pivot(index='Pilar', columns='Status', values='Quantidade')
+            st.bar_chart(chart_pivot)
+            
+            st.markdown("---")
+            
+            # 2. Evaluations per Evaluator
+            st.subheader("Volume de Avaliações por Avaliador")
+            evaluator_counts = all_evals_df['avaliador'].value_counts()
+            st.bar_chart(evaluator_counts)
+            
+            st.markdown("---")
+            
+            # 3. List of recent evaluations
+            st.subheader("Avaliações Recentes")
+            st.dataframe(all_evals_df[['avaliador', 'estudante', 'defina', 'de_contexto', 'data_criacao']].tail(20), use_container_width=True)
 
     # ── Exportação (somente admin/taciana) ─────────────────────────────────────
     st.sidebar.markdown("---")
     st.sidebar.subheader("Exportação de Dados")
 
     if st.session_state.logged_user in ADMIN_USERS:
-        all_evals_df = db.get_all_evaluations()
         if not all_evals_df.empty:
             csv = all_evals_df.to_csv(index=False).encode('utf-8')
             st.sidebar.download_button(
