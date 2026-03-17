@@ -4,6 +4,8 @@ import json
 import os
 import re
 from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
 import google_sheets as db
 
 # Initialize Google Sheets (ensure headers)
@@ -417,7 +419,7 @@ with col_logout:
     st.write("")
     st.markdown('<div class="logout-btn">', unsafe_allow_html=True)
     if st.button("Sair"):
-        for key in ["logged_user", "profile_complete", "user_order"]:
+        for key in ["logged_user", "profile_complete"]:
             st.session_state.pop(key, None)
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -505,14 +507,13 @@ else:
     total_students = len(data)
     filtered_indices = get_student_indices(st.session_state.logged_user, total_students)
 
-    # Mapa: ID anônimo ↔ título real
+    # Mapa: ID anônimo ↔ índice real
     student_options = []
-    student_to_title = {}
+    id_to_index = {}
 
     for i, conv in enumerate(data):
-        title = conv.get('title', 'Sem Título')
         anon_id = f"Estudante {i + 1}"
-        student_to_title[anon_id] = title
+        id_to_index[anon_id] = i
         if i in filtered_indices:
             student_options.append(anon_id)
 
@@ -522,10 +523,11 @@ else:
 
     if page == "Avaliação":
         selected_display = st.sidebar.selectbox("Selecione o Estudante", options=student_options)
-        selected_student_title = student_to_title[selected_display]
+        selected_idx = id_to_index[selected_display]
         selected_name = selected_display
 
-        selected_conv = next(conv for conv in data if conv.get('title') == selected_student_title)
+        selected_conv = data[selected_idx]
+        selected_student_title = selected_conv.get('title', 'Sem Título')
         messages = parse_messages(selected_conv.get('mapping', {}), selected_conv.get('current_node'))
 
         col1, col2 = st.columns([2, 1])
@@ -556,13 +558,13 @@ else:
             db_eval  = db.get_evaluation(user_key)
 
             pillars = [
-                ("denomine_persona",   "1. Denominar uma persona"),
-                ("defina_tarefa",     "2. Definir uma tarefa"),
-                ("descreva_etapas",   "3. Descrever as etapas"),
+                ("denomine",   "1. Denominar uma persona"),
+                ("defina",     "2. Definir uma tarefa"),
+                ("descreva",   "3. Descrever as etapas"),
                 ("de_contexto","4. Dar contexto"),
-                ("delimite_restricoes",   "5. Delimitar restrições"),
-                ("declare_objetivo",    "6. Declarar o objetivo"),
-                ("determine_saida",  "7. Determinar a Saída"),
+                ("delimite",   "5. Delimitar restrições"),
+                ("declare",    "6. Declarar o objetivo"),
+                ("determine",  "7. Determinar a Saída"),
             ]
 
             with st.form(key=f'eval_form_{user_key}'):
@@ -623,34 +625,94 @@ else:
             
             # 1. Distribution by Pillar
             st.subheader("Desempenho por Pilar (7 Ds)")
-            pillars_cols = ["denomine_persona", "defina_tarefa", "descreva_etapas", "de_contexto", "delimite_restricoes", "declare_objetivo", "determine_saida"]
+            
+            pillars_map = {
+                "denomine": "Persona",
+                "defina": "Tarefa",
+                "descreva": "Etapas",
+                "de_contexto": "Contexto",
+                "delimite": "Restrições",
+                "declare": "Objetivo",
+                "determine": "Saída"
+            }
             
             p_data = []
-            for col in pillars_cols:
+            for col, label in pillars_map.items():
                 counts = all_evals_df[col].value_counts()
                 for status in ["Atendeu", "Parcialmente", "Não Atendeu"]:
                     p_data.append({
-                        "Pilar": col.capitalize(),
+                        "Pilar": label,
                         "Status": status,
                         "Quantidade": counts.get(status, 0)
                     })
             
             chart_df = pd.DataFrame(p_data)
             chart_pivot = chart_df.pivot(index='Pilar', columns='Status', values='Quantidade')
+            
+            # Garante que as colunas existam na ordem correta para o gráfico ser estável
+            for col in ["Atendeu", "Parcialmente", "Não Atendeu"]:
+                if col not in chart_pivot.columns:
+                    chart_pivot[col] = 0
+            
+            # Reindexa para manter a ordem dos 7 Pilares e do Status
+            chart_pivot = chart_pivot.reindex(list(pillars_map.values()))
+            chart_pivot = chart_pivot[["Atendeu", "Parcialmente", "Não Atendeu"]]
             st.bar_chart(chart_pivot)
             
             st.markdown("---")
             
-            # 2. Evaluations per Evaluator
-            st.subheader("Volume de Avaliações por Avaliador")
-            evaluator_counts = all_evals_df['avaliador'].value_counts()
-            st.bar_chart(evaluator_counts)
+            # 2. Radar Chart (DNA do Prompt)
+            st.subheader("🎯 Radar de Competências (Média dos 7 Ds)")
+            
+            # Converter Categorias para Números (Mapeamento de Score)
+            score_map = {"Atendeu": 2, "Parcialmente": 1, "Não Atendeu": 0, "Pendente": 0}
+            
+            radar_data = []
+            for col, label in pillars_map.items():
+                # Calcula a média do score para cada pilar
+                avg_score = all_evals_df[col].map(score_map).mean()
+                radar_data.append({"Pilar": label, "Score": avg_score})
+            
+            df_radar = pd.DataFrame(radar_data)
+            
+            fig_radar = go.Figure()
+            fig_radar.add_trace(go.Scatterpolar(
+                r=df_radar['Score'].tolist() + [df_radar['Score'].iloc[0]],
+                theta=df_radar['Pilar'].tolist() + [df_radar['Pilar'].iloc[0]],
+                fill='toself',
+                name='Média do Grupo',
+                line_color='#2563eb'
+            ))
+            
+            fig_radar.update_layout(
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, 2])
+                ),
+                showlegend=False,
+                margin=dict(l=40, r=40, t=20, b=20),
+                height=450
+            )
+            st.plotly_chart(fig_radar, use_container_width=True)
             
             st.markdown("---")
             
+            # 3. Heatmap de Desempenho
+            st.subheader("🔥 Mapa de Calor: Concentração de Desempenho")
+            
+            fig_heatmap = px.imshow(
+                chart_pivot.T,
+                labels=dict(x="Pilar", y="Status", color="Qtd"),
+                x=list(pillars_map.values()),
+                y=["Atendeu", "Parcialmente", "Não Atendeu"],
+                color_continuous_scale="Viridis",
+                text_auto=True
+            )
+            fig_heatmap.update_layout(height=350, margin=dict(l=20, r=20, t=20, b=20))
+            st.plotly_chart(fig_heatmap, use_container_width=True)
+            
             # 3. List of recent evaluations
             st.subheader("Avaliações Recentes")
-            st.dataframe(all_evals_df[['avaliador', 'estudante', 'denomine_persona', 'defina_tarefa', 'descreva_etapas', 'de_contexto', 'data_criacao']].tail(20), use_container_width=True)
+            st.dataframe(all_evals_df[['avaliador', 'estudante', 'defina', 'de_contexto', 'data_criacao']].tail(20), use_container_width=True)
 
     # ── Exportação (somente admin/taciana) ─────────────────────────────────────
     st.sidebar.markdown("---")

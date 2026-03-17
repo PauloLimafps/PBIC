@@ -149,14 +149,14 @@ def save_profile(profile_data: dict):
             if not existing_headers:
                 ws2.append_row(PROFILE_HEADERS)
             else:
-                ws2.update(f"A1:{col_letter}1", [PROFILE_HEADERS])
+                ws2.update([PROFILE_HEADERS], "A1:M1")
 
         records = ws2.get_all_records()
         row_data = [profile_data.get(h, "") for h in PROFILE_HEADERS]
 
         for idx, r in enumerate(records):
             if r.get("usuario") == profile_data["usuario"]:
-                ws2.update(f"A{idx + 2}:{col_letter}{idx + 2}", [row_data])
+                ws2.update([row_data], f"A{idx + 2}:{col_letter}{idx + 2}")
                 return True
 
         ws2.append_row(row_data)
@@ -186,7 +186,7 @@ def init_sheet():
         if not existing_headers:
             sheet.append_row(EVAL_HEADERS)
         else:
-            sheet.update('A1:M1', [EVAL_HEADERS])
+            sheet.update([EVAL_HEADERS], 'A1:M1')
     return True
 
 
@@ -203,7 +203,7 @@ def save_evaluation(eval_data):
 
         if not df.empty and eval_data['user_key'] in df['user_key'].values:
             row_idx = df[df['user_key'] == eval_data['user_key']].index[0] + 2
-            sheet.update(f'A{row_idx}:M{row_idx}', [row_to_save])
+            sheet.update([row_to_save], f'A{row_idx}:M{row_idx}')
         else:
             sheet.append_row(row_to_save)
         return True
