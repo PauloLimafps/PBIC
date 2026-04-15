@@ -770,7 +770,12 @@ else:
                 'determine':   '7. Saída',
             }
             df_display = all_evals_df[display_cols].rename(columns=col_rename)
-            st.dataframe(df_display, use_container_width=True, height=500)
+            
+            # Agrupar por Estudante > Avaliador para facilitar a comparação
+            if 'Estudante' in df_display.columns and 'Avaliador' in df_display.columns:
+                df_display = df_display.sort_values(by=['Estudante', 'Avaliador'])
+                
+            st.dataframe(df_display, use_container_width=True, height=500, hide_index=True)
 
     # ── Exportação (somente admin/taciana) ─────────────────────────────────────
     st.sidebar.markdown("---")
