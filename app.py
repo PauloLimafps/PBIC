@@ -748,18 +748,18 @@ else:
             fig_heatmap.update_layout(height=350, margin=dict(l=20, r=20, t=20, b=20))
             st.plotly_chart(fig_heatmap, use_container_width=True)
             
-            # 4. Lista completa de estudantes avaliados com todos os 7 Ds
-            st.subheader("Lista Completa de Estudantes Avaliados")
-            all_7d_cols = [
-                'estudante', 'avaliador',
-                'denomine', 'defina', 'descreva', 'de_contexto',
-                'delimite', 'declare', 'determine'
+            # 4. Agrupamento Comparativo por Estudante
+            st.subheader("Análise Comparativa por Estudante")
+            st.info("Clique no (+) abaixo para expandir e comparar as avaliações de cada estudante.")
+
+            # Colunas para exibir dentro de cada bloco (sem repetir o nome do estudante)
+            detail_cols = [
+                'avaliador', 'denomine', 'defina', 'descreva', 
+                'de_contexto', 'delimite', 'declare', 'determine'
             ]
-            # Mantém apenas colunas que existem no dataframe (segurança)
-            display_cols = [c for c in all_7d_cols if c in all_evals_df.columns]
-            # Renomeia colunas para exibição mais legível
-            col_rename = {
-                'estudante':   'Estudante',
+            
+            # Mapeamento de nomes para o cabeçalho da mini-tabela
+            col_rename_detail = {
                 'avaliador':   'Avaliador',
                 'denomine':    '1. Persona',
                 'defina':      '2. Tarefa',
@@ -769,13 +769,27 @@ else:
                 'declare':     '6. Objetivo',
                 'determine':   '7. Saída',
             }
-            df_display = all_evals_df[display_cols].rename(columns=col_rename)
-            
-            # Agrupar por Estudante > Avaliador para facilitar a comparação
-            if 'Estudante' in df_display.columns and 'Avaliador' in df_display.columns:
-                df_display = df_display.sort_values(by=['Estudante', 'Avaliador'])
+
+            # Obtém lista única de estudantes e ordena
+            unique_students = sorted(all_evals_df['estudante'].unique())
+
+            for student in unique_students:
+                # Filtra avaliações deste estudante
+                group = all_evals_df[all_evals_df['estudante'] == student]
+                n_evals = len(group)
                 
-            st.dataframe(df_display, use_container_width=True, height=500, hide_index=True)
+                # Cria o bloco expansível
+                with st.expander(f"**{student}** — ({n_evals} avaliações)"):
+                    # Filtra apenas as colunas de interesse existentes
+                    existing_cols = [c for c in detail_cols if c in group.columns]
+                    df_comparativo = group[existing_cols].rename(columns=col_rename_detail)
+                    
+                    # Exibe a tabela de comparação interna
+                    st.dataframe(
+                        df_comparativo.sort_values(by='Avaliador'), 
+                        use_container_width=True, 
+                        hide_index=True
+                    )
 
     # ── Exportação (somente admin/taciana) ─────────────────────────────────────
     st.sidebar.markdown("---")
