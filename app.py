@@ -407,6 +407,7 @@ def get_student_indices(username: str, total: int):
     - Usuários em USER_STUDENT_RANGES: recebem seu range fixo personalizado.
     - Demais avaliadores: recebem blocos de 10 dos estudantes NÃO reservados,
       na ordem em que foram cadastrados (excluindo admins e usuários especiais).
+      A distribuição é CÍCLICA: se acabarem os estudantes, recomeça do 1º grupo.
     """
     if username in ADMIN_USERS:
         return list(range(total))
@@ -421,7 +422,11 @@ def get_student_indices(username: str, total: int):
         reserved.update(r)
     available = [i for i in range(total) if i not in reserved]
 
+    if not available:
+        return []
+
     GROUP_SIZE = 10
+    num_groups = (len(available) + GROUP_SIZE - 1) // GROUP_SIZE
 
     # Se não está no session_state, tenta buscar (fallback de segurança)
     # Exclui também os usuários de USER_STUDENT_RANGES do cálculo de ordem
@@ -432,11 +437,14 @@ def get_student_indices(username: str, total: int):
         )
 
     user_order = st.session_state.get("user_order", 0)
-    start = user_order * GROUP_SIZE
+    
+    # ── Lógica Cíclica ────────────────────────────────────────────────────────
+    # O operador % garante que se tivermos 8 grupos e o user_order for 8 (9º user),
+    # o group_idx voltará a ser 0 (1º grupo).
+    group_idx = user_order % num_groups
+    
+    start = group_idx * GROUP_SIZE
     end   = min(start + GROUP_SIZE, len(available))
-
-    if start >= len(available):
-        return []   # Todos os estudantes disponíveis já foram distribuídos
 
     return available[start:end]
 
