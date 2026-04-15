@@ -2,8 +2,9 @@ name: Manter Streamlit Ativo
 
 on:
   schedule:
-    # Roda a cada 6 horas para evitar a hibernação de 12h
-    - cron: '0 */6 * * *'
+    # Pinga a cada 25 minutos para evitar hibernação (Streamlit hiberna em ~5 min de inatividade)
+    # GitHub Actions gratuito: ~2000 min/mês. 25min = ~2.880 execuções/mês × ~10s = ~480 min/mês. OK.
+    - cron: '*/25 * * * *'
   workflow_dispatch: # Permite rodar manualmente para testar
 
 jobs:
@@ -12,5 +13,12 @@ jobs:
     steps:
       - name: Ping Streamlit App
         run: |
-          # Substitua a URL abaixo pela URL real do seu app
-          curl -I https://pbic-avaliacao.streamlit.app/
+          URL="https://pbic-avaliacao.streamlit.app/"
+          echo "Pingando: $URL"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$URL")
+          echo "HTTP Status: $HTTP_CODE"
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ]; then
+            echo "App respondeu com sucesso."
+          else
+            echo "ATENCAO: App retornou status $HTTP_CODE"
+          fi

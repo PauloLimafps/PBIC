@@ -138,6 +138,13 @@ div[role="radiogroup"] label[data-baseweb="radio"] {
 # ── Usuários com visão total ───────────────────────────────────────────────────
 ADMIN_USERS = ["admin", "taciana"]
 
+# ── Ranges personalizados de estudantes por avaliador ─────────────────────────
+# Chave: username (minúsculo), Valor: range de índices base-0 (exclusivo no fim)
+# Avaliadores NÃO listados aqui recebem os próximos 10 estudantes não reservados.
+USER_STUDENT_RANGES = {
+    "taciana.barbosa": range(60, 80),  # Estudantes 61 a 80
+}
+
 # ── Tela de Acesso (sem senha) ─────────────────────────────────────────────────
 def check_access():
     """
@@ -199,8 +206,9 @@ if st.session_state.get("profile_complete") is True:
     # Busca e cacheia a posição sequencial do usuário (para distribuição de estudantes)
     if "user_order" not in st.session_state and st.session_state.logged_user not in ADMIN_USERS:
         with st.spinner("Carregando sua distribuição de estudantes…"):
+            excluded = list(ADMIN_USERS) + list(USER_STUDENT_RANGES.keys())
             st.session_state["user_order"] = db.get_user_order_index(
-                st.session_state.logged_user, ADMIN_USERS
+                st.session_state.logged_user, excluded
             )
 
 if st.session_state.get("profile_complete") is None:
@@ -344,8 +352,9 @@ if st.session_state["profile_complete"] is False:
                         st.session_state["profile_complete"] = True
                         # Cacheia a posição sequencial para distribuição de estudantes
                         if st.session_state.logged_user not in ADMIN_USERS:
+                            excluded = list(ADMIN_USERS) + list(USER_STUDENT_RANGES.keys())
                             st.session_state["user_order"] = db.get_user_order_index(
-                                st.session_state.logged_user, ADMIN_USERS
+                                st.session_state.logged_user, excluded
                             )
                         st.success("✅ Perfil salvo! Redirecionando…")
                         st.rerun()
@@ -390,25 +399,46 @@ def parse_messages(mapping, current_node):
     return messages
 
 
-def get_student_indices(username: str, total: int) -> range:
+def get_student_indices(username: str, total: int):
     """
-    Distribuição sequencial por ordem de cadastro, grupos de 10.
+    Distribuição de estudantes por avaliador.
+
+    - Admins: veem todos os estudantes.
+    - Usuários em USER_STUDENT_RANGES: recebem seu range fixo personalizado.
+    - Demais avaliadores: recebem blocos de 10 dos estudantes NÃO reservados,
+      na ordem em que foram cadastrados (excluindo admins e usuários especiais).
     """
     if username in ADMIN_USERS:
-        return range(total)
-    
+        return list(range(total))
+
+    # Range fixo configurado manualmente
+    if username in USER_STUDENT_RANGES:
+        return list(USER_STUDENT_RANGES[username])
+
+    # ── Calcula os índices disponíveis (não reservados) ────────────────────────
+    reserved = set()
+    for r in USER_STUDENT_RANGES.values():
+        reserved.update(r)
+    available = [i for i in range(total) if i not in reserved]
+
     GROUP_SIZE = 10
-    num_groups = (total + GROUP_SIZE - 1) // GROUP_SIZE
-    
+
     # Se não está no session_state, tenta buscar (fallback de segurança)
+    # Exclui também os usuários de USER_STUDENT_RANGES do cálculo de ordem
+    excluded = list(ADMIN_USERS) + list(USER_STUDENT_RANGES.keys())
     if "user_order" not in st.session_state:
-        st.session_state["user_order"] = db.get_user_order_index(username, ADMIN_USERS)
-    
+        st.session_state["user_order"] = db.get_user_order_index(
+            username, excluded
+        )
+
     user_order = st.session_state.get("user_order", 0)
-    group_idx = user_order % num_groups
-    start = group_idx * GROUP_SIZE
-    end   = min(start + GROUP_SIZE, total)
-    return range(start, end)
+    start = user_order * GROUP_SIZE
+    end   = min(start + GROUP_SIZE, len(available))
+
+    if start >= len(available):
+        return []   # Todos os estudantes disponíveis já foram distribuídos
+
+    return available[start:end]
 
 
 # ── Header + Logout ────────────────────────────────────────────────────────────
@@ -606,7 +636,7 @@ else:
                             st.error("Erro ao salvar. Verifique a configuração.")
 
     elif page == "Dashboard":
-        st.header("📊 Dashboard de Análise de Avaliações")
+        st.header("Dashboard de Análise de Avaliações")
         
         if all_evals_df.empty:
             st.warning("Nenhuma avaliação registrada ainda para gerar o dashboard.")
@@ -662,7 +692,7 @@ else:
             st.markdown("---")
             
             # 2. Radar Chart (DNA do Prompt)
-            st.subheader("🎯 Radar de Competências (Média dos 7 Ds)")
+            st.subheader("Radar de Competências (Média dos 7 Ds)")
             
             # Converter Categorias para Números (Mapeamento de Score)
             score_map = {"Atendeu": 2, "Parcialmente": 1, "Não Atendeu": 0, "Pendente": 0}
@@ -697,7 +727,7 @@ else:
             st.markdown("---")
             
             # 3. Heatmap de Desempenho
-            st.subheader("🔥 Mapa de Calor: Concentração de Desempenho")
+            st.subheader("Mapa de Calor: Concentração de Desempenho")
             
             fig_heatmap = px.imshow(
                 chart_pivot.T,
@@ -710,9 +740,29 @@ else:
             fig_heatmap.update_layout(height=350, margin=dict(l=20, r=20, t=20, b=20))
             st.plotly_chart(fig_heatmap, use_container_width=True)
             
-            # 3. List of recent evaluations
-            st.subheader("Avaliações Recentes")
-            st.dataframe(all_evals_df[['avaliador', 'estudante', 'defina', 'de_contexto', 'data_criacao']].tail(20), use_container_width=True)
+            # 4. Lista completa de estudantes avaliados com todos os 7 Ds
+            st.subheader("Lista Completa de Estudantes Avaliados")
+            all_7d_cols = [
+                'estudante', 'avaliador',
+                'denomine', 'defina', 'descreva', 'de_contexto',
+                'delimite', 'declare', 'determine'
+            ]
+            # Mantém apenas colunas que existem no dataframe (segurança)
+            display_cols = [c for c in all_7d_cols if c in all_evals_df.columns]
+            # Renomeia colunas para exibição mais legível
+            col_rename = {
+                'estudante':   'Estudante',
+                'avaliador':   'Avaliador',
+                'denomine':    '1. Persona',
+                'defina':      '2. Tarefa',
+                'descreva':    '3. Etapas',
+                'de_contexto': '4. Contexto',
+                'delimite':    '5. Restrições',
+                'declare':     '6. Objetivo',
+                'determine':   '7. Saída',
+            }
+            df_display = all_evals_df[display_cols].rename(columns=col_rename)
+            st.dataframe(df_display, use_container_width=True, height=500)
 
     # ── Exportação (somente admin/taciana) ─────────────────────────────────────
     st.sidebar.markdown("---")
