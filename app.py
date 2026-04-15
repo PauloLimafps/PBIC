@@ -770,8 +770,13 @@ else:
                 'determine':   '7. Saída',
             }
 
-            # Obtém lista única de estudantes e ordena
-            unique_students = sorted(all_evals_df['estudante'].unique())
+            # Obtém lista única de estudantes e aplica ordenação natural (numérica)
+            def natural_sort_key(s):
+                # Extrai todos os números da string e os transforma em inteiros para ordenar
+                return [int(text) if text.isdigit() else text.lower()
+                        for text in re.split(r'(\d+)', str(s))]
+
+            unique_students = sorted(all_evals_df['estudante'].unique(), key=natural_sort_key)
 
             for student in unique_students:
                 # Filtra avaliações deste estudante
