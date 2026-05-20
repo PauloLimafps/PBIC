@@ -139,10 +139,11 @@ div[role="radiogroup"] label[data-baseweb="radio"] {
 ADMIN_USERS = ["admin", "taciana"]
 
 # ── Ranges personalizados de estudantes por avaliador ─────────────────────────
-# Chave: username (minúsculo), Valor: range de índices base-0 (exclusivo no fim)
+# Chave: username (minúsculo), Valor: range OU lista de índices base-0
 # Avaliadores NÃO listados aqui recebem os próximos 10 estudantes não reservados.
 USER_STUDENT_RANGES = {
-    "taciana.barbosa": range(60, 80),  # Estudantes 61 a 80
+    "taciana.barbosa": range(60, 80),                              # Estudantes 61 a 80
+    "gabriel.guerra":  list(range(40, 50)) + list(range(80, 99)), # Estudantes 41-50 e 81-99
 }
 
 # ── Tela de Acesso (sem senha) ─────────────────────────────────────────────────
