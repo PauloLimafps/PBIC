@@ -751,6 +751,18 @@ else:
             
             # 4. Agrupamento Comparativo por Estudante
             st.subheader("Análise Comparativa por Estudante")
+            
+            # Filtro de Concordância
+            filtro_concordancia = st.radio(
+                "Filtrar por Concordância:",
+                options=[
+                    "Todos os Estudantes", 
+                    "Apenas com Divergências (Avaliadores discordam)", 
+                    "Apenas com Consenso (Avaliadores concordam em tudo)"
+                ],
+                horizontal=True
+            )
+            
             st.info("Clique no (+) abaixo para expandir e comparar as avaliações de cada estudante.")
 
             # Colunas para exibir dentro de cada bloco (sem repetir o nome do estudante)
@@ -771,6 +783,17 @@ else:
                 'determine':   '7. Saída',
             }
 
+            pillars_keys = ['denomine', 'defina', 'descreva', 'de_contexto', 'delimite', 'declare', 'determine']
+            pillars_names_map = {
+                'denomine':    'Persona',
+                'defina':      'Tarefa',
+                'descreva':    'Etapas',
+                'de_contexto': 'Contexto',
+                'delimite':    'Restrições',
+                'declare':     'Objetivo',
+                'determine':   'Saída',
+            }
+
             # Obtém lista única de estudantes e aplica ordenação natural (numérica)
             def natural_sort_key(s):
                 # Extrai todos os números da string e os transforma em inteiros para ordenar
@@ -779,23 +802,73 @@ else:
 
             unique_students = sorted(all_evals_df['estudante'].unique(), key=natural_sort_key)
 
+            # Processa e classifica a concordância de todos os estudantes
+            students_processed = []
             for student in unique_students:
-                # Filtra avaliações deste estudante
                 group = all_evals_df[all_evals_df['estudante'] == student]
                 n_evals = len(group)
                 
-                # Cria o bloco expansível
-                with st.expander(f"**{student}** — ({n_evals} avaliações)"):
-                    # Filtra apenas as colunas de interesse existentes
-                    existing_cols = [c for c in detail_cols if c in group.columns]
-                    df_comparativo = group[existing_cols].rename(columns=col_rename_detail)
+                divergent_pillars = []
+                if n_evals >= 2:
+                    for k in pillars_keys:
+                        if k in group.columns:
+                            # Se há mais de 1 valor único para este pilar, há divergência
+                            if group[k].nunique() > 1:
+                                divergent_pillars.append(pillars_names_map[k])
+                
+                if n_evals < 2:
+                    status = "Pendente"
+                elif len(divergent_pillars) > 0:
+                    status = "Divergente"
+                else:
+                    status = "Consenso"
                     
-                    # Exibe a tabela de comparação interna
-                    st.dataframe(
-                        df_comparativo.sort_values(by='Avaliador'), 
-                        use_container_width=True, 
-                        hide_index=True
-                    )
+                students_processed.append({
+                    'student': student,
+                    'group': group,
+                    'n_evals': n_evals,
+                    'status': status,
+                    'divergent_pillars': divergent_pillars
+                })
+
+            # Aplica o filtro de concordância
+            if filtro_concordancia == "Apenas com Divergências (Avaliadores discordam)":
+                students_to_show = [s for s in students_processed if s['status'] == "Divergente"]
+            elif filtro_concordancia == "Apenas com Consenso (Avaliadores concordam em tudo)":
+                students_to_show = [s for s in students_processed if s['status'] == "Consenso"]
+            else:
+                students_to_show = students_processed
+
+            # Exibe os resultados
+            if not students_to_show:
+                st.write("Nenhum estudante encontrado com o filtro selecionado.")
+            else:
+                for s in students_to_show:
+                    student = s['student']
+                    group = s['group']
+                    n_evals = s['n_evals']
+                    status = s['status']
+                    divergent_pillars = s['divergent_pillars']
+                    
+                    # Constrói o título do expander com ícones e status claros
+                    if status == "Divergente":
+                        title = f"⚠️ **{student}** — ({n_evals} avaliações) — Divergência em: {', '.join(divergent_pillars)}"
+                    elif status == "Consenso":
+                        title = f"✅ **{student}** — ({n_evals} avaliações) — Consenso Total"
+                    else:
+                        title = f"👤 **{student}** — ({n_evals} avaliação) — Aguardando segunda avaliação"
+                        
+                    with st.expander(title):
+                        # Filtra apenas as colunas de interesse existentes
+                        existing_cols = [c for c in detail_cols if c in group.columns]
+                        df_comparativo = group[existing_cols].rename(columns=col_rename_detail)
+                        
+                        # Exibe a tabela de comparação interna
+                        st.dataframe(
+                            df_comparativo.sort_values(by='Avaliador'), 
+                            use_container_width=True, 
+                            hide_index=True
+                        )
 
     # ── Exportação (somente admin/taciana) ─────────────────────────────────────
     st.sidebar.markdown("---")
