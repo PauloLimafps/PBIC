@@ -229,7 +229,7 @@ if st.session_state["profile_complete"] is False:
     .profile-header p  { color: var(--text-soft); font-size: 1.05rem; }
     </style>
     <div class="profile-header">
-        <h1>👋 Bem-vindo ao Sistema de Avaliação!</h1>
+        <h1> Bem-vindo ao Sistema de Avaliação!</h1>
         <p>Antes de começar, precisamos conhecer um pouco sobre você.<br>
            Essas informações serão salvas apenas uma vez.</p>
     </div>
@@ -241,7 +241,7 @@ if st.session_state["profile_complete"] is False:
             st.subheader(f"Perfil do Avaliador — @{st.session_state.logged_user}")
             with st.form("profile_form"):
 
-                st.markdown("**📋 Dados Pessoais**")
+                st.markdown("** Dados Pessoais**")
                 nome = st.text_input("Nome Completo *", placeholder="Seu nome completo")
                 
                 col_a, col_b = st.columns(2)
@@ -256,7 +256,7 @@ if st.session_state["profile_complete"] is False:
                     )
 
                 st.markdown("---")
-                st.markdown("**🎓 Formação & Experiência**")
+                st.markdown("** Formação & Experiência**")
 
                 formacao = st.text_input(
                     "Formação *",
@@ -292,7 +292,7 @@ if st.session_state["profile_complete"] is False:
                 )
 
                 st.markdown("---")
-                st.markdown("**🤖 Experiência com Inteligência Artificial**")
+                st.markdown("** Experiência com Inteligência Artificial**")
 
                 tipo_uso_ia = st.radio(
                     "Como você utiliza IA? *",
@@ -358,7 +358,7 @@ if st.session_state["profile_complete"] is False:
                             st.session_state["user_order"] = db.get_user_order_index(
                                 st.session_state.logged_user, excluded
                             )
-                        st.success("✅ Perfil salvo! Redirecionando…")
+                        st.success("Perfil salvo! Redirecionando…")
                         st.rerun()
                     else:
                         st.error("Não foi possível salvar o perfil. Tente novamente.")
@@ -466,7 +466,7 @@ with col_logout:
 
 st.sidebar.markdown(f"**Avaliador:** {st.session_state.logged_user}")
 if st.session_state.logged_user in ADMIN_USERS:
-    st.sidebar.markdown("🔑 *Acesso total*")
+    st.sidebar.markdown("*Acesso total*")
 
 # ── Navegação ──────────────────────────────────────────────────────────────────
 page = st.sidebar.radio("Navegação", ["Avaliação", "Dashboard"])
@@ -654,7 +654,7 @@ else:
                             p_values[key] = val1
                         else:
                             st.markdown(f"**{label}**")
-                            st.warning("⚠️ **Divergência:** Escolha uma das opções abaixo para desempatar.")
+                            st.warning("**Divergência:** Escolha uma das opções abaixo para desempatar.")
                             tb_options = [val1, val2]
                             if db_val == "Pendente" or db_val not in tb_options:
                                 tb_options_with_pendente = tb_options + ["Pendente"]
