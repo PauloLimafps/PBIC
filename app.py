@@ -137,6 +137,7 @@ div[role="radiogroup"] label[data-baseweb="radio"] {
 
 # ── Usuários com visão total ───────────────────────────────────────────────────
 ADMIN_USERS = ["admin", "taciana"]
+TIEBREAKER_USER = "bruno.hipolito"
 
 # ── Ranges personalizados de estudantes por avaliador ─────────────────────────
 # Chave: username (minúsculo), Valor: range OU lista de índices base-0
@@ -544,7 +545,31 @@ else:
         )
 
     total_students = len(data)
-    filtered_indices = get_student_indices(st.session_state.logged_user, total_students)
+    
+    if st.session_state.logged_user == TIEBREAKER_USER:
+        filtered_indices = []
+        if not all_evals_df.empty:
+            pillars_keys = ['denomine', 'defina', 'descreva', 'de_contexto', 'delimite', 'declare', 'determine']
+            evals_grouped = all_evals_df.groupby('email_original')
+            divergent_titles = set()
+            for title, group in evals_grouped:
+                if len(group) == 2:
+                    row1 = group.iloc[0]
+                    row2 = group.iloc[1]
+                    has_divergence = False
+                    for p in pillars_keys:
+                        if row1.get(p) != row2.get(p):
+                            has_divergence = True
+                            break
+                    if has_divergence:
+                        divergent_titles.add(title)
+            
+            for i, conv in enumerate(data):
+                title = conv.get('title', 'Sem Título')
+                if title in divergent_titles:
+                    filtered_indices.append(i)
+    else:
+        filtered_indices = get_student_indices(st.session_state.logged_user, total_students)
 
     # Mapa: ID anônimo ↔ índice real
     student_options = []
@@ -610,10 +635,35 @@ else:
                 st.write("Avalie cada pilar:")
                 options = ["Atendeu", "Parcialmente", "Não Atendeu", "Pendente"]
                 p_values = {}
+                
+                is_tiebreaker = (st.session_state.logged_user == TIEBREAKER_USER)
+                previous_evals = []
+                if is_tiebreaker and not all_evals_df.empty:
+                    previous_evals = all_evals_df[all_evals_df['email_original'] == selected_student_title].to_dict('records')
+
                 for key, label in pillars:
                     db_val = db_eval.get(key, "Pendente") if db_eval else "Pendente"
-                    idx = options.index(db_val) if db_val in options else 3
-                    p_values[key] = st.radio(f"**{label}**", options, index=idx, horizontal=True)
+                    
+                    if is_tiebreaker and len(previous_evals) == 2:
+                        val1 = previous_evals[0].get(key)
+                        val2 = previous_evals[1].get(key)
+                        
+                        if val1 == val2:
+                            st.markdown(f"**{label}**")
+                            st.info(f"Consenso: {val1}")
+                            p_values[key] = val1
+                        else:
+                            st.markdown(f"**{label}**")
+                            st.warning("⚠️ **Divergência:** Escolha uma das opções abaixo para desempatar.")
+                            tb_options = [val1, val2]
+                            if db_val == "Pendente" or db_val not in tb_options:
+                                tb_options_with_pendente = tb_options + ["Pendente"]
+                                p_values[key] = st.radio(label, tb_options_with_pendente, index=2, horizontal=True, label_visibility="collapsed")
+                            else:
+                                p_values[key] = st.radio(label, tb_options, index=tb_options.index(db_val), horizontal=True, label_visibility="collapsed")
+                    else:
+                        idx = options.index(db_val) if db_val in options else 3
+                        p_values[key] = st.radio(f"**{label}**", options, index=idx, horizontal=True)
 
                 obs_val = st.text_area(
                     "Observações Gerais",
