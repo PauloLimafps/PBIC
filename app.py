@@ -936,5 +936,30 @@ else:
             st.sidebar.info(f"Total de avaliações: {len(all_evals_df)}")
         else:
             st.sidebar.warning("Nenhuma avaliação registrada ainda.")
+            
+        # Exportação de interações (Excel)
+        import io
+        student_interactions = []
+        for i, conv in enumerate(data):
+            anon_id = f"Estudante {i + 1}"
+            msgs = parse_messages(conv.get('mapping', {}), conv.get('current_node'))
+            student_interactions.append({
+                "Estudante": anon_id,
+                "Email / Título": conv.get('title', 'Sem Título'),
+                "Qtd de Mensagens Trocadas": len(msgs)
+            })
+        df_int = pd.DataFrame(student_interactions)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_int.to_excel(writer, index=False, sheet_name='Interações')
+        excel_data = output.getvalue()
+        
+        st.sidebar.download_button(
+            label="Baixar Interações (Excel)",
+            data=excel_data,
+            file_name=f"interacoes_estudantes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+
     else:
         st.sidebar.info("Exportação restrita a administradores.")
