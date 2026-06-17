@@ -137,7 +137,7 @@ div[role="radiogroup"] label[data-baseweb="radio"] {
 
 # ── Usuários com visão total ───────────────────────────────────────────────────
 ADMIN_USERS = ["admin", "taciana"]
-TIEBREAKER_USER = "bruno.hipolito"
+TIEBREAKER_USER = "brunohipolito"
 
 # ── Ranges personalizados de estudantes por avaliador ─────────────────────────
 # Chave: username (minúsculo), Valor: range OU lista de índices base-0
