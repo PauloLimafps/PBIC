@@ -138,6 +138,7 @@ div[role="radiogroup"] label[data-baseweb="radio"] {
 # ── Usuários com visão total ───────────────────────────────────────────────────
 ADMIN_USERS = ["admin", "taciana"]
 TIEBREAKER_USER = "brunohipolito"
+ALLOW_NEW_USERS = False
 
 # ── Ranges personalizados de estudantes por avaliador ─────────────────────────
 # Chave: username (minúsculo), Valor: range OU lista de índices base-0
@@ -222,6 +223,14 @@ if st.session_state.get("profile_complete") is None:
 
 # ── Formulário de Perfil (1ª vez) ─────────────────────────────────────────────
 if st.session_state["profile_complete"] is False:
+    if not ALLOW_NEW_USERS:
+        st.error("O cadastro de novos avaliadores está temporariamente suspenso.")
+        if st.button("Voltar para o Login"):
+            for key in ["logged_user", "profile_complete"]:
+                st.session_state.pop(key, None)
+            st.rerun()
+        st.stop()
+        
     st.markdown("""
     <style>
     .profile-header { text-align: center; padding: 2rem 0 1rem; }
